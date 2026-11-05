@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CBP Certificate Upload Portal</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PDF.js for client-side PDF verification -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    </script>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-50 min-h-screen py-6 px-4 sm:px-6">
+
+    <div class="max-w-xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
+        <!-- Header -->
+        <div class="bg-indigo-900 py-6 px-6 text-white text-center">
+            <h1 class="text-xl sm:text-2xl font-bold">CBP Certificate Portal</h1>
+            <p class="text-xs sm:text-sm text-indigo-200 mt-1">Upload and verify your training certificates securely</p>
+        </div>
+
+        <!-- WhatsApp Browser Alert -->
+        <div id="waBanner" class="hidden bg-amber-50 border-l-4 border-amber-400 p-4 m-4 text-amber-800 text-xs sm:text-sm rounded-r-lg">
+            ⚠️ <strong>WhatsApp Browser Detected:</strong> Tap the <strong>3 dots (...)</strong> in the top right corner and select <strong>"Open in Chrome"</strong> for best performance.
+        </div>
+
+        <div class="p-6 space-y-6">
+            <!-- Teacher Selection -->
+            <div>
+                <label for="teacherSelect" class="block text-sm font-semibold text-slate-700 mb-1">Select Your Name <span class="text-red-500">*</span></label>
+                <select id="teacherSelect" onchange="loadTeacherData()" class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-slate-800 bg-white">
+                    <option value="">-- Select Your Name --</option>
+                </select>
+            </div>
+
+            <!-- Portal Content -->
+            <div id="portalContent" style="display:none;" class="space-y-6">
+                <div>
+                    <h3 class="text-sm font-bold text-slate-800 border-b pb-2 mb-3 uppercase tracking-wider">Pending Capacity Building Programmes:</h3>
+                    <div id="pendingCbpList" class="space-y-4"></div>
+                </div>
+
+                <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                    <h3 class="text-sm font-bold text-emerald-800 mb-2">Verified & Successfully Submitted Modules:</h3>
+                    <ul id="completedCbpList" class="space-y-1.5 pl-4 list-disc text-xs sm:text-sm text-emerald-700 font-medium"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- SUPABASE CONFIGURATION ---
+        const SUPABASE_URL = 'YOUR_SUPABASE_URL_HERE';
+        const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY_HERE';
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // Check WhatsApp Browser
+        const isWhatsApp = /WhatsApp/i.test(navigator.userAgent);
+        if (isWhatsApp) {
+            document.getElementById("waBanner").style.display = "block";
+        }
+
+        // Teacher Database mapping
+        const teacherData = {
+            "Renu Malik": ["Gender Sensitivity in Schools", "Accountancy (Senior Secondary)", "Happy Classroom", "Active Learning"],
+            "ANCHAL KAMBOJ": ["Gender Sensitivity in Schools", "Mathematics (Secondary)", "Happy Classroom", "Educating Parents about Education"],
+            "Anju Sharma": ["Life Skills (Advance)", "Storytelling as Pedagogy", "Happy Classroom", "Biology (Senior Secondary)"],
+            "Anuradha": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom", "Mathematics (Secondary)"],
+            "ARPITRAMA BHOWMICK": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Science (Secondary)"],
+            "Ashish Bhatia": ["Gender Sensitivity in Schools", "Mathematics (Secondary)", "Happy Classroom", "Educating Parents about Education"],
+            "BHARTI BHATT": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom"],
+            "BOBY": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom", "Mathematics (Secondary)"],
+            "CHAND DEEP KAUR": ["Social Emotional Learning", "Educating Parents about Education", "Happy Classroom", "Science (Secondary)"],
+            "DAISY  LUTHRA": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom"],
+            "DEEPIKA BAKSHI": ["Gender Sensitivity in Schools", "Educating Parents about Education", "National Education Policy 2020", "Mathematics (Secondary)"],
+            "Dharamveer": ["Educating Parents about Education", "Economics (Senior Secondary)"],
+            "Diksha": ["Gender Sensitivity in Schools", "Storytelling as Pedagogy", "Accountancy (Senior Secondary)"],
+            "Divya": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom"],
+            "GITA": ["Gender Sensitivity in Schools", "Science (Secondary)", "Happy Classroom", "Educating Parents about Education"],
+            "GURPREET KAUR (ECO)": ["Gender Sensitivity in Schools", "Storytelling as Pedagogy", "Happy Classroom", "Economics (Senior Secondary)"],
+            "GURPREET KAUR (ENG)": ["Educating Parents about Education", "Gender Sensitivity in Schools", "Storytelling as Pedagogy", "Happy Classroom", "English Core (Senior Secondary)"],
+            "GURPREET KAUR (COMP)": ["Gender Sensitivity in Schools", "Storytelling as Pedagogy", "Happy Classroom", "Python (Senior Secondary)"],
+            "JAGBIR SINGH": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom", "Physical Education (Senior Secondary Level)"],
+            "JAIDEEP KUMAR": ["Gender Sensitivity in Schools", "Educating Parents about Education", "National Education Policy 2020", "Mathematics (Secondary)"],
+            "Jasvinder": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom", "Punjabi"],
+            "JYOTI": ["SOCIAL EMOTIONAL LEARNING", "Storytelling as Pedagogy", "National Education Policy 2020", "Mathematics (Secondary)", "Educating Parents about Education", "Happy Classroom"],
+            "KANIKA": ["SOCIAL EMOTIONAL LEARNING", "Educating Parents about Education", "National Education Policy 2020"],
+            "KAPIL  DEV": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom", "Physical Education (Senior Secondary Level)"],
+            "KAVITA RANI (TGT)": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom", "Social Science (Secondary)"],
+            "Kavita (PRT)": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom", "Mathematics (Secondary)"],
+            "KOMPAL": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom", "Social Science (Secondary)"],
+            "MADHU BALA": ["National Education Policy 2020"],
+            "Mamta Yadav": ["Gender Sensitivity in Schools", "Social Science (Secondary)", "Happy Classroom", "Educating Parents about Education"],
+            "Mandeep Singh": ["Gender Sensitivity in Schools", "Physics (Senior Secondary)", "Happy Classroom", "Educating Parents about Education"],
+            "Manisha Devi": ["Gender Sensitivity in Schools", "Social Science (Secondary)", "Happy Classroom", "Educating Parents about Education"],
+            "MANPREET KAUR (English)": ["Gender Sensitivity in Schools", "English Core (Senior Secondary)", "Happy Classroom", "Storytelling as Pedagogy"],
+            "Manpreet Kaur (Accountancy)": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom", "Accountancy (Senior Secondary)"],
+            "MONIKA VERMA": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom", "Business Studies (Senior Secondary)"],
+            "Mamta Rani": ["Gender Sensitivity in Schools", "Storytelling as Pedagogy", "Happy Classroom"],
+            "Parul Sharma": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom"],
+            "MUSKAN SHARMA": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom", "Social Science (Secondary)"],
+            "Neeru Arora": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom", "Mathematics (Secondary)"],
+            "NEERU MEHTA": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom"],
+            "Neetu Kaur": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom"],
+            "NIKITA KUMARI": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom", "Python (Senior Secondary)"],
+            "PARMINDER GULATI": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom", "Physical Education (Senior Secondary Level)"],
+            "PAYAL GARG": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom"],
+            "POOJA SHARMA": ["SOCIAL EMOTIONAL LEARNING", "Educating Parents about Education", "National Education Policy 2020", "Mathematics (Secondary)"],
+            "Poonam Sharma": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom"],
+            "Prabhjot Kaur": ["SOCIAL EMOTIONAL LEARNING", "Educating Parents about Education", "National Education Policy 2020"],
+            "PREET": [],
+            "PREETI DIWAN": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom"],
+            "RACHNA KAMBOJ": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom"],
+            "Rajeev": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom"],
+            "REENA RANA": ["Life Skills (Advance)", "Educating Parents about Education", "Happy Classroom"],
+            "REENA SHUKLA": ["Gender Sensitivity in Schools", "Mathematics (Secondary)", "Happy Classroom", "Educating Parents about Education"],
+            "REETA (PGT)": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom", "Chemistry (Senior Secondary)"],
+            "REETA (PRT)": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom"],
+            "REKHA RANI": ["Gender Sensitivity in Schools", "Educating Parents about Education", "National Education Policy 2020"],
+            "Rekha Sharma": ["Gender Sensitivity in Schools", "Storytelling as Pedagogy", "National Education Policy 2020", "English Core (Senior Secondary)"],
+            "Rinky Sabharwal": ["SOCIAL EMOTIONAL LEARNING", "Educating Parents about Education", "Happy Classroom", "Mathematics (Secondary)"],
+            "Ritika": ["Gender Sensitivity in Schools", "Storytelling as Pedagogy", "Happy Classroom", "Biology (Senior Secondary)"],
+            "Ritu": ["Gender Sensitivity in Schools", "Educating Parents about Education", "National Education Policy 2020", "Mathematics (Secondary)"],
+            "SATNAM KAUR": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom"],
+            "Satwinder Kaur": ["Life Skills (Advance)", "Educating Parents about Education", "National Education Policy 2020"],
+            "Shikha Rani": ["Gender Sensitivity in Schools", "Storytelling as Pedagogy", "Happy Classroom", "English Core (Senior Secondary)"],
+            "SHILPA SHARMA": ["Gender Sensitivity in Schools", "Storytelling as Pedagogy", "Happy Classroom", "English Core (Senior Secondary)"],
+            "SIMMI": ["Life Skills (Advance)", "Educating Parents about Education", "Happy Classroom", "Mathematics (Secondary)"],
+            "SONAM GULATI": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom"],
+            "Sonia kohli": ["Gender Sensitivity in Schools", "Hindi Course - B (Secondary)", "Happy Classroom", "Educating Parents about Education"],
+            "Sucheta": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom", "Accountancy (Senior Secondary)"],
+            "Sulekha Rani": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom", "Chemistry (Senior Secondary)"],
+            "Sunita Beri": ["Gender Sensitivity in Schools", "Hindi Course - B (Secondary)", "Happy Classroom", "Educating Parents about Education"],
+            "SURBHI GARG": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom", "Mathematics (Secondary)"],
+            "Tarun Kalra": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom"],
+            "VANDANA BEDI": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom", "Science (Secondary)"],
+            "Vaneeta": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom", "Science (Secondary)"],
+            "VIKRAMJEET SINGH": ["Gender Sensitivity in Schools", "Educating Parents about Education", "Happy Classroom"],
+            "JYOTI (NTT)": ["SOCIAL EMOTIONAL LEARNING", "National Education Policy 2020", "Storytelling as Pedagogy", "Mathematics (Secondary)"],
+            "JYOTI (TGT)": ["Educating Parents about Education", "SOCIAL EMOTIONAL LEARNING", "Happy Classroom"]
+        };
+
+        const select = document.getElementById("teacherSelect");
+        Object.keys(teacherData).sort().forEach(teacher => {
+            let opt = document.createElement("option");
+            opt.value = teacher;
+            opt.textContent = teacher;
+            select.appendChild(opt);
+        });
+
+        window.onload = function() {
+            let savedTeacher = localStorage.getItem("activeTeacherSession");
+            if (savedTeacher && teacherData[savedTeacher]) {
+                select.value = savedTeacher;
+                loadTeacherData();
+            }
+        };
+
+        function loadTeacherData() {
+            const teacher = select.value;
+            const content = document.getElementById("portalContent");
+            if (!teacher) {
+                content.style.display = "none";
+                localStorage.removeItem("activeTeacherSession");
+                return;
+            }
+            localStorage.setItem("activeTeacherSession", teacher);
+            content.style.display = "block";
+            renderCBPs(teacher);
+        }
+
+        async function renderCBPs(teacher) {
+            const pendingDiv = document.getElementById("pendingCbpList");
+            const completedUl = document.getElementById("completedCbpList");
+            
+            pendingDiv.innerHTML = "<p class='text-xs text-slate-500'>Syncing from database...</p>";
+            completedUl.innerHTML = "";
+
+            let cbps = teacherData[teacher] || [];
+            
+            // Fetch submissions from Supabase Database
+            const { data: dbRecords } = await supabaseClient
+                .from('certificates')
+                .select('cbp_title')
+                .eq('teacher_name', teacher);
+
+            let completed = dbRecords ? dbRecords.map(r => r.cbp_title) : [];
+            let pendingCount = 0;
+            pendingDiv.innerHTML = "";
+
+            cbps.forEach((cbp, index) => {
+                if (completed.includes(cbp)) {
+                    let li = document.createElement("li");
+                    li.innerHTML = `<strong>${cbp}</strong> <span class="text-emerald-600 font-semibold ml-2">✅ Submitted</span>`;
+                    completedUl.appendChild(li);
+                } else {
+                    pendingCount++;
+                    let card = document.createElement("div");
+                    card.className = "bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-3 shadow-sm";
+                    card.innerHTML = `
+                        <div>
+                            <p class="font-bold text-slate-800 text-sm sm:text-base">${cbp}</p>
+                            <div id="msg_${index}" class="text-xs font-semibold mt-1"></div>
+                        </div>
+                        <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                            <input type="file" id="file_${index}" accept=".pdf" class="text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer">
+                            <button id="btn_${index}" onclick="verifyAndUpload('${teacher.replace(/'/g, "\\'")}', '${cbp.replace(/'/g, "\\'")}', ${index})" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg text-xs sm:text-sm transition shadow">Verify & Upload</button>
+                        </div>
+                    `;
+                    pendingDiv.appendChild(card);
+                }
+            });
+
+            if (pendingCount === 0) {
+                pendingDiv.innerHTML = "<p class='text-emerald-700 font-bold text-sm bg-emerald-50 p-4 rounded-xl text-center'>🎉 All modules verified & submitted successfully!</p>";
+            }
+            if (completed.length === 0) {
+                completedUl.innerHTML = "<li class='text-slate-400 list-none'>No certificates submitted yet.</li>";
+            }
+        }
+
+        async function verifyAndUpload(teacherName, cbpTitle, index) {
+            const fileInput = document.getElementById(`file_${index}`);
+            const msgDiv = document.getElementById(`msg_${index}`);
+            const btn = document.getElementById(`btn_${index}`);
+
+            if (!fileInput || fileInput.files.length === 0) {
+                msgDiv.className = "text-xs font-semibold text-red-600";
+                msgDiv.textContent = "❌ Please select a PDF certificate first.";
+                return;
+            }
+
+            const file = fileInput.files[0];
+            if (file.type !== "application/pdf") {
+                msgDiv.className = "text-xs font-semibold text-red-600";
+                msgDiv.textContent = "❌ Only PDF files are allowed.";
+                return;
+            }
+
+            msgDiv.className = "text-xs font-semibold text-amber-600";
+            msgDiv.textContent = "🔍 Scanning PDF content...";
+            btn.disabled = true;
+
+            let pdf = null;
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                let fullText = "";
+
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    fullText += textContent.items.map(item => item.str).join(" ") + " ";
+                    if (page.cleanup) page.cleanup();
+                }
+
+                const pdfContentLower = fullText.toLowerCase();
+                const searchName = teacherName.toLowerCase().trim();
+                const nameMatched = pdfContentLower.includes(searchName);
+
+                const titleWords = cbpTitle.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+                let matchedWordsCount = 0;
+                titleWords.forEach(word => {
+                    if (pdfContentLower.includes(word)) matchedWordsCount++;
+                });
+                const titleMatched = (titleWords.length === 0) || (matchedWordsCount >= Math.min(2, titleWords.length));
+
+                if (pdf.destroy) pdf.destroy();
+
+                if (nameMatched && titleMatched) {
+                    msgDiv.className = "text-xs font-semibold text-amber-600";
+                    msgDiv.textContent = "☁️ Uploading to Supabase Cloud...";
+
+                    // Automatic Folder Path in Storage Bucket
+                    const filePath = `${teacherName}/${cbpTitle}_${file.name}`;
+
+                    // 1. Upload File to Supabase Storage
+                    const { error: storageError } = await supabaseClient.storage
+                        .from('teacher-certificates')
+                        .upload(filePath, file, { upsert: true });
+
+                    if (storageError) {
+                        msgDiv.className = "text-xs font-semibold text-red-600";
+                        msgDiv.textContent = "❌ Storage Error: " + storageError.message;
+                        btn.disabled = false;
+                        return;
+                    }
+
+                    // 2. Get Public URL
+                    const { data: { publicUrl } } = supabaseClient.storage
+                        .from('teacher-certificates')
+                        .getPublicUrl(filePath);
+
+                    // 3. Save Record in Supabase Database Table
+                    const { error: dbError } = await supabaseClient
+                        .from('certificates')
+                        .insert([{ teacher_name: teacherName, cbp_title: cbpTitle, file_url: publicUrl }]);
+
+                    if (dbError) {
+                        msgDiv.className = "text-xs font-semibold text-red-600";
+                        msgDiv.textContent = "❌ Database Error: " + dbError.message;
+                        btn.disabled = false;
+                    } else {
+                        msgDiv.className = "text-xs font-semibold text-emerald-600";
+                        msgDiv.textContent = "✅ Successfully Verified & Saved!";
+                        setTimeout(() => renderCBPs(teacherName), 1500);
+                    }
+
+                } else {
+                    let errorReason = !nameMatched ? "Verification Failed: Name not found in PDF." : "Verification Failed: Certificate title doesn't match.";
+                    msgDiv.className = "text-xs font-semibold text-red-600";
+                    msgDiv.textContent = `❌ ${errorReason}`;
+                    btn.disabled = false;
+                }
+
+            } catch (err) {
+                if (pdf && pdf.destroy) pdf.destroy();
+                msgDiv.className = "text-xs font-semibold text-red-600";
+                msgDiv.textContent = "❌ Error reading PDF file.";
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
